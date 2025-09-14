@@ -5,8 +5,6 @@
 #include "ui.h"
 #include "cpu.h"
 
-/* ---------- утилиты ---------- */
-
 static int streq(const char* a, const char* b){
     while(*a && *b && *a==*b){ a++; b++; }
     return *a==0 && *b==0;
@@ -45,7 +43,6 @@ static void print_dec32(uint32_t v){
 
 static void prompt(void){ vga_write("\n> "); }
 
-/* ---------- about ---------- */
 static void cmd_about(void){
     vga_write("Chlenos OS\n");
     vga_write("Author: boyjayy\n");
@@ -58,13 +55,10 @@ static void cmd_about(void){
     vga_write("Use 'sys' for CPU info\n");
 }
 
-/* ---------- ticks ---------- */
 static void cmd_ticks(void){
     uint32_t t = (uint32_t)pit_ticks();
     vga_write("ticks="); print_dec32(t); vga_putc('\n');
 }
-
-/* ---------- time ---------- */
 __attribute__((noinline,optimize("O0")))
 static void split_ms(uint32_t in_ms, uint32_t* sec_out, uint32_t* ms_out){
     uint32_t ms = in_ms, sec = 0;
@@ -82,7 +76,6 @@ static void cmd_time(void){
     print_dec32(sec); vga_write(" s)\n");
 }
 
-/* ---------- hex ---------- */
 static int dec_parse32(const char* s, uint32_t* out){
     uint32_t v=0; int any=0;
     s = lstrip(s);
@@ -101,7 +94,6 @@ static void cmd_hex(const char* args){
     vga_write("hex="); print_hex32(v); vga_putc('\n');
 }
 
-/* ---------- sys (CPUID) ---------- */
 static void decode_cpuver(uint32_t ver, uint32_t* fam, uint32_t* model, uint32_t* stepping){
     uint32_t stepping_id =  ver        & 0xF;
     uint32_t model_id    = (ver >> 4)  & 0xF;
@@ -155,14 +147,12 @@ static void cmd_sys(void){
     }
 }
 
-/* ---------- print ---------- */
 static void cmd_print(const char* args){
     const char* s = lstrip(args);
     if(*s == '\0'){ vga_write("usage: print <text>\n"); return; }
     vga_write(s); vga_putc('\n');
 }
 
-/* ---------- очистка консоли (без шапки) ---------- */
 
 void console_clear(void){
     int top = ui_console_top();
@@ -171,7 +161,6 @@ void console_clear(void){
     vga_move(top, 0);
 }
 
-/* ---------- интерфейс ---------- */
 
 static void cmd_help(void){
     vga_write("commands:\n");
@@ -200,7 +189,7 @@ void console_run(void){
         if(c=='\r' || c=='\n'){
             vga_putc('\n'); line[len]='\0';
 
-            if(len==0){ /* noop */ }
+            if(len==0){  }
             else if(streq(line,"help"))      cmd_help();
             else if(streq(line,"clear"))     console_clear();
             else if(streq(line,"ticks"))     cmd_ticks();
