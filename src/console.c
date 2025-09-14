@@ -4,7 +4,7 @@
 #include "keyboard.h"
 #include "ui.h"
 #include "cpu.h"
-
+// мне впадлу опись писать сами разберетесь
 static int streq(const char* a, const char* b){
     while(*a && *b && *a==*b){ a++; b++; }
     return *a==0 && *b==0;
