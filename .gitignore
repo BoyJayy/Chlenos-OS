@@ -1,0 +1,13 @@
+# build artifacts
+/build/
+/iso/
+/myos.iso
+
+# temporary
+*.o
+*.elf
+
+# system
+.DS_Store
+Thumbs.db
+
