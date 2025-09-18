@@ -1,7 +1,7 @@
 TARGET := kernel.elf
-ISO    := myos.iso
-BUILD  := build
-SRC    := src
+ISO := myos.iso
+BUILD := build
+SRC := src
 
 CC  := gcc
 LD  := ld
