@@ -7,9 +7,9 @@ static struct idt_ptr   idtp;
 
 void idt_set_gate(int n, uint32_t base, uint16_t sel, uint8_t flags){
     idt[n].base_lo = base & 0xFFFF;
-    idt[n].sel     = sel;
+    idt[n].sel= sel;
     idt[n].always0 = 0;
-    idt[n].flags   = flags;
+    idt[n].flags = flags;
     idt[n].base_hi = (base >> 16) & 0xFFFF;
 }
 
