@@ -77,5 +77,8 @@ run: all
 clean:
 	rm -rf $(BUILD) $(ISO) iso
 
-.PHONY: all iso run clean
+.PHONY: all iso run clean gui
+
+gui:
+	python3 tools/chlenos_gui.py
 

@@ -4,7 +4,8 @@
 #include "keyboard.h"
 #include "ui.h"
 #include "cpu.h"
-// мне впадлу опись писать сами разберетесь
+#include "portio.h"
+
 static int streq(const char* a, const char* b){
     while(*a && *b && *a==*b){ a++; b++; }
     return *a==0 && *b==0;
@@ -41,6 +42,19 @@ static void print_dec32(uint32_t v){
     }
 }
 
+static void print_dec2(uint32_t v){
+    if(v >= 10u) vga_putc('0' + (char)(v/10u));
+    else vga_putc('0');
+    vga_putc('0' + (char)(v%10u));
+}
+
+static void print_dec3(uint32_t v){
+    if(v > 999u) v = 999u;
+    vga_putc('0' + (char)(v/100u));
+    vga_putc('0' + (char)((v/10u)%10u));
+    vga_putc('0' + (char)(v%10u));
+}
+
 static void prompt(void){ vga_write("\n> "); }
 
 static void cmd_about(void){
@@ -59,6 +73,7 @@ static void cmd_ticks(void){
     uint32_t t = (uint32_t)pit_ticks();
     vga_write("ticks="); print_dec32(t); vga_putc('\n');
 }
+
 __attribute__((noinline,optimize("O0")))
 static void split_ms(uint32_t in_ms, uint32_t* sec_out, uint32_t* ms_out){
     uint32_t ms = in_ms, sec = 0;
@@ -76,16 +91,63 @@ static void cmd_time(void){
     print_dec32(sec); vga_write(" s)\n");
 }
 
+static void cmd_uptime(void){
+    uint32_t t  = (uint32_t)pit_ticks();
+    uint32_t ms = t * 10u;
+    uint32_t sec, rem_ms; split_ms(ms, &sec, &rem_ms);
+
+    uint32_t total_min = sec / 60u;
+    uint32_t ss = sec % 60u;
+    uint32_t hh = total_min / 60u;
+    uint32_t mm = total_min % 60u;
+
+    vga_write("uptime: ");
+    print_dec32(hh); vga_putc(':'); print_dec2(mm); vga_putc(':'); print_dec2(ss);
+    vga_putc('.'); print_dec3(rem_ms); vga_putc('\n');
+}
+
 static int dec_parse32(const char* s, uint32_t* out){
     uint32_t v=0; int any=0;
     s = lstrip(s);
     while(*s>='0' && *s<='9'){
-        v = (v<<3) + (v<<1) + (uint32_t)(*s - '0'); // v*10 + digit
+        v = (v<<3) + (v<<1) + (uint32_t)(*s - '0');
         s++; any=1;
     }
     s = lstrip(s);
     if(!any || *s) return 0;
     *out=v; return 1;
+}
+
+
+static int parse_u32_token(const char** s_ptr, uint32_t* out){
+    const char* s = lstrip(*s_ptr);
+    uint32_t v = 0; int any = 0;
+    while(*s >= '0' && *s <= '9'){
+        v = (v<<3) + (v<<1) + (uint32_t)(*s - '0');
+        s++; any = 1;
+    }
+    if(!any) return 0;
+    *out = v;
+    *s_ptr = s;
+    return 1;
+}
+
+static int parse_i32(const char** s_ptr, int32_t* out){
+    const char* s = lstrip(*s_ptr);
+    int neg = 0;
+    if(*s == '-'){ neg = 1; s++; }
+    else if(*s == '+'){ s++; }
+
+    uint32_t u = 0; int any = 0;
+    while(*s >= '0' && *s <= '9'){
+        u = (u<<3) + (u<<1) + (uint32_t)(*s - '0');
+        s++; any = 1;
+    }
+    if(!any) return 0;
+
+    *out = neg ? -(int32_t)u : (int32_t)u;
+    *s_ptr = s;
+    return 1;
 }
 
 static void cmd_hex(const char* args){
@@ -153,6 +215,45 @@ static void cmd_print(const char* args){
     vga_write(s); vga_putc('\n');
 }
 
+static void cmd_color(const char* args){
+    uint32_t fg, bg;
+    const char* p = args;
+
+    if(!parse_u32_token(&p, &fg)){ vga_write("usage: color <fg 0..15> <bg 0..15>\n"); return; }
+    if(!parse_u32_token(&p, &bg)){ vga_write("usage: color <fg 0..15> <bg 0..15>\n"); return; }
+    p = lstrip(p);
+    if(*p || fg > 15u || bg > 15u){ vga_write("usage: color <fg 0..15> <bg 0..15>\n"); return; }
+
+    vga_setcolor((uint8_t)fg, (uint8_t)bg);
+    vga_write("color updated\n");
+}
+
+static void cmd_calc(const char* args){
+    const char* p = args;
+    int32_t a, b;
+    if(!parse_i32(&p, &a)){ vga_write("usage: calc <a> <+|-|*> <b>\n"); return; }
+    p = lstrip(p);
+    char op = *p;
+    if(op != '+' && op != '-' && op != '*'){ vga_write("usage: calc <a> <+|-|*> <b>\n"); return; }
+    p++;
+    if(!parse_i32(&p, &b)){ vga_write("usage: calc <a> <+|-|*> <b>\n"); return; }
+    p = lstrip(p);
+    if(*p){ vga_write("usage: calc <a> <+|-|*> <b>\n"); return; }
+
+    int32_t r = 0;
+    if(op == '+') r = a + b;
+    else if(op == '-') r = a - b;
+    else r = a * b;
+
+    if(r < 0){ vga_putc('-'); print_dec32((uint32_t)(-r)); }
+    else print_dec32((uint32_t)r);
+    vga_putc('\n');
+}
+
+static void cmd_reboot(void){
+    vga_write("rebooting...\n");
+    outb(0x64, 0xFE);
+}
 
 void console_clear(void){
     int top = ui_console_top();
@@ -161,22 +262,25 @@ void console_clear(void){
     vga_move(top, 0);
 }
 
-
 static void cmd_help(void){
     vga_write("commands:\n");
-    vga_write("  help         - this help\n");
-    vga_write("  clear        - clear console area (keep header)\n");
-    vga_write("  ticks        - show PIT ticks (32-bit)\n");
-    vga_write("  time         - show uptime in ms/sec\n");
-    vga_write("  hex <num>    - print number in hex (decimal input)\n");
-    vga_write("  print <text> - echo text\n");
-    vga_write("  about        - about this OS\n");
-    vga_write("  sys          - CPU & environment info\n");
+    vga_write("  help           - this help\n");
+    vga_write("  clear          - clear console area (keep header)\n");
+    vga_write("  ticks          - show PIT ticks (32-bit)\n");
+    vga_write("  time           - show uptime in ms/sec\n");
+    vga_write("  uptime         - show uptime as HH:MM:SS.mmm\n");
+    vga_write("  hex <num>      - print number in hex (decimal input)\n");
+    vga_write("  calc a op b    - integer calculator (+, -, *)\n");
+    vga_write("  color fg bg    - set VGA text colors (0..15)\n");
+    vga_write("  print <text>   - echo text\n");
+    vga_write("  about          - about this OS\n");
+    vga_write("  sys            - CPU & environment info\n");
+    vga_write("  reboot         - try soft reboot via keyboard ctl\n");
 }
 
 void console_init(void){
     vga_move(ui_console_top(), 0);
-    vga_write("\nType something:\n");
+    vga_write("\nType something (help):\n");
     prompt();
 }
 
@@ -194,10 +298,15 @@ void console_run(void){
             else if(streq(line,"clear"))     console_clear();
             else if(streq(line,"ticks"))     cmd_ticks();
             else if(streq(line,"time"))      cmd_time();
+            else if(streq(line,"uptime"))    cmd_uptime();
             else if(starts(line,"hex "))     cmd_hex(line+4);
+            else if(starts(line,"calc "))    cmd_calc(line+5);
+            else if(starts(line,"color "))   cmd_color(line+6);
             else if(starts(line,"print "))   cmd_print(line+6);
+            else if(starts(line,"echo "))    cmd_print(line+5);
             else if(streq(line,"about"))     cmd_about();
             else if(streq(line,"sys") || streq(line,"sysinfo")) cmd_sys();
+            else if(streq(line,"reboot"))    cmd_reboot();
             else { vga_write("unknown: "); vga_write(line); vga_putc('\n'); }
 
             len=0; prompt(); continue;
@@ -210,4 +319,3 @@ void console_run(void){
         }
     }
 }
-
